@@ -1,0 +1,22 @@
+{{- if .Values.features.uaa.native }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: uaa
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+  - name: http-uaa
+    port: 8080
+    protocol: TCP
+    targetPort: http-uaa
+  - name: ssl-uaa
+    port: 8443
+    protocol: TCP
+    targetPort: ssl-uaa
+  selector:
+    app: uaa
+  type: ClusterIP
+{{- end }}

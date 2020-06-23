@@ -132,6 +132,10 @@ sizing:
     instances: ~
   uaa:
     instances: ~
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 500m
   tcp_router:
     instances: ~
 
@@ -367,6 +371,19 @@ features:
         name: credhub
         password: ~
         username: ~
+
+  uaa:
+    # Temporary setting to use Kubernetes-native UAA.  Disabled by default for now; it will be
+    # be switched over at some point in the future.
+    native: false
+    # The docker image to use for UAA
+    image: cfidentity/uaa
+    # The docker image tag to use for UAA
+    image_tag: latest
+    # Temporary hack: init container image
+    init_image: splatform/fissile-stemcell-sle
+    # Temporary hack: init container tag
+    init_image_tag: SLE_15_SP1-26.2
 
 # Enable or disable instance groups for the different test suites.
 # Only smoke tests should be run in production environments.

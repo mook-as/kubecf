@@ -101,6 +101,14 @@
 
 {{- end }}
 
+{{- if .Values.features.uaa.native }}
+# Disable the UAA instance group, but still use it to generate any necessary
+# secrets for use with native UAA.
+- type: replace
+  path: /instance_groups/name=uaa/lifecycle?
+  value: disabled
+{{- end }}
+
 {{- range $bytes := .Files.Glob "assets/operations/pre_render_scripts/uaa_*" }}
 {{ $bytes | toString }}
 {{- end }}

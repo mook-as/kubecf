@@ -1,0 +1,484 @@
+{{- $_ := include "_config.load" . }}
+{{- if .Values.features.uaa.native }}
+
+{{- $uaa_image := "" }}
+{{- $uaa_init_image := "" }}
+{{- with .Values.features.uaa }}
+  {{- if hasPrefix "@" .image_tag }}
+    {{- $uaa_image = printf "%s%s" .image .image_tag }}
+  {{- else }}
+    {{- $uaa_image = printf "%s:%s" .image .image_tag }}
+  {{- end }}
+  {{- if hasPrefix "@" .init_image_tag }}
+    {{- $uaa_init_image = printf "%s%s" .init_image .init_image_tag }}
+  {{- else }}
+    {{- $uaa_init_image = printf "%s:%s" .init_image .init_image_tag }}
+  {{- end }}
+{{- end }}
+
+{{- $secrets := list }}
+{{- $secrets = append $secrets "var-cf-admin-password" }}
+{{- $secrets = append $secrets "var-credhub-admin-client-secret" }}
+{{- $secrets = append $secrets "var-credhub-setup-client-secret" }}
+{{- $secrets = append $secrets "var-uaa-admin-client-secret" }}
+{{- $secrets = append $secrets "var-uaa-ca" }}
+{{- $secrets = append $secrets "var-uaa-clients-cc-routing-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-cc-service-dashboards-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-cc-service-key-client-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-cf-smoke-tests-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-cloud-controller-username-lookup-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-doppler-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-gorouter-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-network-policy-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-routing-api-client-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-ssh-proxy-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-tcp-emitter-secret" }}
+{{- $secrets = append $secrets "var-uaa-clients-tcp-router-secret" }}
+{{- $secrets = append $secrets "var-uaa-database-password" }}
+{{- $secrets = append $secrets "var-uaa-default-encryption-passphrase" }}
+{{- $secrets = append $secrets "var-uaa-jwt-signing-key" }}
+{{- $secrets = append $secrets "var-uaa-login-saml" }}
+{{- $secrets = append $secrets "var-uaa-setup-client-secret" }}
+{{- $secrets = append $secrets "var-uaa-ssl" }}
+{{- $secrets = append $secrets "with-ops" }}
+{{- if not .Values.features.ingress.enabled }}
+{{- $secrets = append $secrets "var-nats-password" }}
+{{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace | quote }}
+  name: uaa
+spec:
+  selector:
+    matchLabels:
+      app: uaa
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: uaa
+      annotations:
+        quarks.cloudfoundry.org/wait-for: '[ "database" ]'
+    spec:
+      serviceAccountName: uaa
+      initContainers:
+      - name: generate-nginx-config
+        image: {{ $uaa_init_image }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -o errexit -o nounset -o xtrace -o pipefail
+          cp /run/secrets/uaa-ssl/* /run/nginx-config/
+          cat > /run/nginx-config/nginx.conf <<"EOF"
+            events {}
+            stream {
+              server {
+                listen 8443 ssl;
+
+                ssl_certificate     /etc/nginx/certificate;
+                ssl_certificate_key /etc/nginx/private_key;
+
+                proxy_pass localhost:8080;
+              }
+            }
+          EOF
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /run/nginx-config
+        - name: var-uaa-ssl
+          mountPath: /run/secrets/uaa-ssl
+      - name: generate-uaa-config
+        image: {{ $uaa_init_image }}
+        {{- $dburl := printf "jdbc:mysql://database.%s.svc:3306/uaa" .Release.Namespace }}
+        {{- $db_adapter := "mysql" }}
+        {{- if .Values.features.embedded_database.enabled | not }}
+          {{- with .Values.features.external_database }}
+            {{- $dburl = printf "jdbc:%s://%s:%s" .type .host .port }}
+            {{- $db_adapter = .type }}
+          {{- end }}
+        {{- end }}
+        command:
+        - /usr/bin/ruby
+        - -e
+        - |
+          require 'json'
+          require 'yaml'
+
+          def secret(path)
+            File.read("/run/secrets/#{path}").chomp
+          end
+
+          # TODO: generate the OAuth clients with some sane mechanism, rather than
+          # pulling it out of the BOSH configs (which should go away eventually).
+          manifest = YAML.load secret('with-ops/manifest.yaml')
+          ig = manifest['instance_groups'].find { |g| g['name'] == 'uaa' }
+          job = ig['jobs'].find { |j| j['name'] == 'uaa' }
+
+          # Replace the OAuth client secrets because we don't get template-render
+          job['properties']['uaa']['clients'].each_value do |config|
+            /^\(\((?<secret_name>[^\)]+)\)\)$/ =~ config['secret']
+            next if secret_name.nil?
+            secret_name.gsub! /_/, '-'
+            config['secret'] = secret("var-#{secret_name}/password")
+          end
+
+          config = {
+            admin: {
+              client_secret: secret('var-uaa-admin-client-secret/password'),
+            },
+            ca_certs: [ secret('var-uaa-ca/certificate') ],
+            database: {
+              url: '{{ $dburl }}',
+              username: 'uaa',
+              password: secret('var-uaa-database-password/password'),
+            },
+            encryption: {
+              active_key_label: 'default_key',
+              encryption_keys: [{
+                label: 'default_key',
+                passphrase: secret('var-uaa-default-encryption-passphrase/password'),
+              }]
+            },
+            issuer: {
+              uri: 'https://uaa.{{ .Values.system_domain }}',
+            },
+            jwt: {
+              token: {
+                policy: {
+                  activeKeyId: 'key-1',
+                  keys: {
+                    'key-1': {
+                      signingKey: secret('var-uaa-jwt-signing-key/private_key'),
+                    },
+                  },
+                },
+              },
+            },
+            login: {
+              saml: {
+                activeKeyId: 'key-1',
+                keys: {
+                  'key-1': {
+                    certificate: secret('var-uaa-login-saml/certificate'),
+                    key: secret('var-uaa-login-saml/private_key'),
+                    passphrase: '',
+                  }
+                }
+              }
+            },
+            oauth: {
+              clients: job['properties']['uaa']['clients']
+            },
+            scim: {
+              userids_enabled: true,
+              user: { override: true },
+              users: []
+            },
+            spring_profiles: "default,{{ $db_adapter }}",
+          }
+
+          # TODO: generate the user correctly, rather than just hard-coding it
+          # here.
+          config[:scim][:users] = [{
+            name: 'admin',
+            password: secret('var-cf-admin-password/password'),
+            firstName: '',
+            lastName: '',
+            email: 'admin',
+            origin: 'uaa',
+            groups: %w(
+              clients.read
+              cloud_controller.admin
+              doppler.firehose
+              network.admin
+              openid
+              routing.router_groups.read
+              routing.router_groups.write
+              scim.read
+              scim.write
+            )
+          }].map do |user|
+            user[:groups] = user[:groups].join(',') if user[:groups].is_a? Array
+            %w(name password email firstName lastName groups origin).map do |key|
+              user[key.to_sym]
+            end.join('|')
+          end
+
+          # Round trip through JSON to convert symbol (keys) to string
+          config = JSON.load config.to_json
+
+          Dir.chdir('/etc/config') do
+            open('uaa.yml', 'w') { |f| Psych.dump(config, f) }
+          end
+        volumeMounts:
+        - name: uaa-config
+          mountPath: /etc/config
+        {{- range $secrets }}
+        - name: {{ . }}
+          mountPath: /run/secrets/{{ . }}
+        {{- end }}
+      {{- if not .Values.features.ingress.enabled }}
+      - name: generate-route-registrar-config
+        image: {{ $uaa_init_image }}
+        command:
+        - /usr/bin/ruby
+        - -e
+        - |
+          require 'json'
+
+          def secret(path)
+            File.read("/run/secrets/#{path}").chomp
+          end
+
+          config = {
+            message_bus_servers: [{
+              # XXX FIXME: This should be the pods, not the fronting service.
+              host: 'nats:4222',
+              user: 'nats',
+              password: secret('var-nats-password/password'),
+            }],
+            # XXX FIXME: We should have a per-replica endpoint here
+            host: 'uaa.service.cf.internal',
+            routes: [{
+              health_check: {
+                name: 'uaa-healthcheck',
+                # XXX FIXME: do a proper check on http://:8080/healthz == 'ok'
+                script_path: '/bin/true',
+              },
+              name: 'uaa',
+              registration_interval: '10s',
+              service_cert_domain_san: 'uaa.service.cf.internal',
+              tags: { component: 'uaa' },
+              tls_port: 8443,
+              uris: [
+                'uaa.{{ .Values.system_domain }}',
+                '*.uaa.{{ .Values.system_domain }}',
+                'login.{{ .Values.system_domain }}',
+                '*.login.{{ .Values.system_domain }}',
+              ]
+            }],
+            routing_api: {
+              ca_certs: '/run/config/ca.crt',
+              client_cert_path: '/run/config/client.crt',
+              client_private_key_path: '/run/config/client.key',
+              server_ca_cert_path: '/run/config/server_ca.crt',
+              api_url: 'https://routing-api.service.cf.internal:3001',
+              oauth_url: 'https://uaa.service.cf.internal:8443',
+              client_id: 'routing_api_client',
+              skip_ssl_validation: false,
+            }
+          }
+
+          Dir.chdir('/run/config') do
+            open('registrar_settings.json', 'w') do |f|
+              f.puts config.to_json
+            end
+          end
+        volumeMounts:
+        - name: route-registrar-config
+          mountPath: /run/config
+        - name: var-nats-password
+          mountPath: /run/secrets/var-nats-password
+      {{- end }}{{/* not .Values.features.ingress.enabled */}}
+      - name: generate-log-config
+        image: {{ $uaa_image }}
+        command:
+        - sh
+        - -c
+        - |
+          cat > /etc/config/log4j2.properties <<"EOF"
+          status = error
+          dest = err
+          name = UaaLog
+
+          property.log_pattern=[%d{yyyy-MM-dd HH:mm:ss.SSS}] uaa%X{context} - %pid [%t] .... %5p --- %c{1}: %replace{%m}{(?<=password=|client_secret=)([^&]*)}{<redacted>}%n
+
+          appender.uaaDefaultAppender.type = Console
+          appender.uaaDefaultAppender.name = UaaDefaultAppender
+          appender.uaaDefaultAppender.layout.type = PatternLayout
+          appender.uaaDefaultAppender.layout.pattern = [UAA] ${log_pattern}
+
+          appender.uaaAuditAppender.type = Console
+          appender.uaaAuditAppender.name = UaaAuditAppender
+          appender.uaaAuditAppender.layout.type = PatternLayout
+          appender.uaaAuditAppender.layout.pattern = [UAA_AUDIT] ${log_pattern}
+
+          rootLogger.level = info
+          rootLogger.appenderRef.uaaDefaultAppender.ref = UaaDefaultAppender
+
+          logger.UAAAudit.name = UAA.Audit
+          logger.UAAAudit.level = info
+          logger.UAAAudit.additivity = true
+          logger.UAAAudit.appenderRef.auditEventLog.ref = UaaAuditAppender
+
+          logger.cfIdentity.name = org.cloudfoundry.identity
+          logger.cfIdentity.level = info
+          logger.cfIdentity.additivity = false
+          logger.cfIdentity.appenderRef.uaaDefaultAppender.ref = UaaDefaultAppender
+          EOF
+        volumeMounts:
+        - name: uaa-config
+          mountPath: /etc/config
+      - name: build-uaa-truststore
+        image: {{ $uaa_image }}
+        command:
+        - 'sh'
+        - '-c'
+        - |
+          find_keytool_or_fail_fast() {
+            local has_keytool
+            ls "${JAVA_HOME}"/bin/keytool
+            has_keytool=$?
+            if [ ${has_keytool} -ne 0 ]; then
+              exit ${has_keytool}
+            fi
+          }
+          import_cert() {
+            local pemfile="${1}"
+            local alias="${2}"
+            echo "Adding ${pemfile} to truststore"
+            # Have to use cat instead of -file
+            # because keytool won't understand all of the filenames!
+            cat "${pemfile}" | "${JAVA_HOME}"/bin/keytool \
+              -noprompt \
+              -import \
+              -trustcacerts \
+              -alias "${alias}" \
+              -keystore "${TRUSTSTORE_FILE}" \
+              -storepass "${TRUSTSTORE_PASSWORD}"
+          }
+          get_alias() {
+            local pemfile="${1}"
+            basename "${pemfile}" .pem
+          }
+          add_ca_certs() {
+            local has_ca_certs
+            ls ${SECRETS_DIR}/ca_certs/*.pem
+            has_ca_certs=$?
+            if [ ${has_ca_certs} -eq 0 ]; then
+              for cert in ${SECRETS_DIR}/ca_certs/*.pem; do
+                import_cert "${cert}" "$(get_alias $cert)"
+              done
+            fi
+          }
+          add_system_certs() {
+            for cert in $OS_CERTS_DIR/*.pem; do
+              import_cert "${cert}" "$(get_alias $cert)"
+            done
+          }
+          main() {
+            find_keytool_or_fail_fast
+            add_ca_certs
+            add_system_certs
+          }
+          main
+        env:
+        - name: TRUSTSTORE_FILE
+          value: /etc/truststore/uaa.pkcs12.truststore
+        - name: TRUSTSTORE_PASSWORD
+          value: changeit # XXX CHANGE ME
+        - name: JAVA_HOME
+          value: /layers/paketo-buildpacks_bellsoft-liberica/jre
+        - name: OS_CERTS_DIR
+          value: /etc/ssl/certs
+        volumeMounts:
+        - name: truststore-file
+          mountPath: /etc/truststore
+      containers:
+      - name: uaa
+        image: {{ $uaa_image }}
+        resources:
+          requests:
+            memory: {{ .Values.sizing.uaa.resources.requests.memory }}
+            cpu: {{ .Values.sizing.uaa.resources.requests.cpu }}
+        ports:
+        - name: http-uaa
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: BPL_TOMCAT_ACCESS_LOGGING
+          value: "y" # XXX change me
+        - name: CATALINA_OUT
+          value: /proc/self/fd/1
+        - name: JAVA_OPTS
+          # XXX change trust store password
+          value: >-
+            -Djava.security.egd=file:/dev/urandom
+            -Dlogging.config=/etc/config/log4j2.properties
+            -Dlog4j.configurationFile=/etc/config/log4j2.properties
+            -DCLOUDFOUNDRY_CONFIG_PATH=/etc/config
+            -DSECRETS_DIR=/etc/secrets
+            -Djavax.net.ssl.trustStore=/etc/truststore/uaa.pkcs12.truststore
+            -Djavax.net.ssl.trustStoreType=PKCS12
+            -Djavax.net.ssl.trustStorePassword=changeit
+            -Dstatsd.enabled=true
+        volumeMounts:
+        - name: uaa-config
+          mountPath: /etc/config
+        - name: truststore-file
+          mountPath: /etc/truststore
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http-uaa
+          failureThreshold: 25
+          initialDelaySeconds: 60
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http-uaa
+      - name: ssl-endpoint
+        image: nginx:stable
+        ports:
+        - name: ssl-uaa
+          containerPort: 8443
+          protocol: TCP
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx
+          readOnly: true
+      {{- if not .Values.features.ingress.enabled }}
+      - name: route-registrar
+        # XXX FIXME: Get rid of the route registrar (because we should be using
+        # proper ingress into the deployment)
+        image:
+          {{- with .Values.releases.routing }}
+            {{- printf "%s/routing:%s-%s-%s" .url .stemcell.os .stemcell.version .version }}
+          {{- end }}
+        command: [ /usr/bin/dumb-init, -- ]
+        args:
+        - /var/vcap/packages/route_registrar/bin/route-registrar
+        - --configPath
+        - /run/config/registrar_settings.json
+        - -timeFormat
+        - rfc3339
+        - -logLevel
+        - info
+        volumeMounts:
+        - name: route-registrar-config
+          mountPath: /run/config
+          readOnly: true
+      {{- end }}
+      volumes:
+      - name: nginx-config
+        emptyDir: {}
+      - name: uaa-config
+        emptyDir: {}
+      {{- if not .Values.features.ingress.enabled }}
+      - name: route-registrar-config
+        emptyDir: {}
+      {{- end }}
+      - name: truststore-file
+        emptyDir: {}
+      {{- range $secrets }}
+      - name: {{ . }}
+        secret:
+          secretName: {{ . }}
+      {{- end }}
+{{- end }}

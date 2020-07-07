@@ -51,17 +51,20 @@ kind: Deployment
 metadata:
   namespace: {{ .Release.Namespace | quote }}
   name: uaa
+  labels:
+    {{- list $ "uaa" | include "kubecf.component.labels" | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      app: uaa
+      {{- list $ "uaa" | include "kubecf.component.selector" | nindent 6 }}
   replicas: 1
   template:
     metadata:
       labels:
-        app: uaa
+        {{- list $ "uaa" | include "kubecf.component.labels" | nindent 8 }}
       annotations:
-        quarks.cloudfoundry.org/wait-for: '[ "database" ]'
+        # Require NATS for route-registrar
+        quarks.cloudfoundry.org/wait-for: '[ "database", "nats" ]'
     spec:
       serviceAccountName: uaa
       initContainers:
@@ -115,7 +118,7 @@ spec:
           # TODO: generate the OAuth clients with some sane mechanism, rather than
           # pulling it out of the BOSH configs (which should go away eventually).
           manifest = YAML.load secret('with-ops/manifest.yaml')
-          ig = manifest['instance_groups'].find { |g| g['name'] == 'uaa' }
+          ig = manifest['addons'].find { |g| g['name'] == 'uaa' }
           job = ig['jobs'].find { |j| j['name'] == 'uaa' }
 
           # Replace the OAuth client secrets because we don't get template-render

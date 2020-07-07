@@ -3,8 +3,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: uaa
+  name: uaa-native
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- list . "uaa" | include "kubecf.component.labels" | nindent 4 }}
 spec:
   clusterIP: None
   ports:
@@ -17,6 +19,6 @@ spec:
     protocol: TCP
     targetPort: ssl-uaa
   selector:
-    app: uaa
+    {{- list . "uaa" | include "kubecf.component.selector" | nindent 4 }}
   type: ClusterIP
 {{- end }}

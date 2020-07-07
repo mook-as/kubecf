@@ -102,13 +102,31 @@
 {{- end }}
 
 {{- if .Values.features.uaa.native }}
-# Disable the UAA instance group, but still use it to generate any necessary
-# secrets for use with native UAA.
+# Create a fake addon that is never enabled
 - type: replace
-  path: /instance_groups/name=uaa/lifecycle?
-  value: disabled
-{{- end }}
+  path: /addons/-
+  value:
+    name: uaa
+
+# Move the UAA OAuth clients out so we can get them later
+- type: qmove
+  from: /instance_groups/name=uaa/jobs/name=uaa
+  path: /addons/name=uaa/jobs?/-
+
+# Delete the UAA instance group
+- type: remove
+  path: /instance_groups/name=uaa
+
+# We need to rename the service to support toggling between native & BOSH UAA.
+# This is necessary as the service is otherwise owned by the BOSH manifest.
+- type: replace
+  path: /addons/name=bosh-dns-aliases/jobs/name=bosh-dns-aliases/properties/aliases/domain=uaa.service.cf.internal/targets/instance_group=uaa/instance_group
+  value: uaa-native
+
+{{- else }}
 
 {{- range $bytes := .Files.Glob "assets/operations/pre_render_scripts/uaa_*" }}
 {{ $bytes | toString }}
+{{- end }}
+
 {{- end }}

@@ -9,7 +9,6 @@
 {{- $instance_groups = append $instance_groups "nats" }}
 {{- $instance_groups = append $instance_groups "router" }}
 {{- $instance_groups = append $instance_groups "scheduler" }}
-{{- $instance_groups = append $instance_groups "uaa" }}
 
 {{- /* Autoscaler-only instance groups */}}
 {{- if .Values.features.autoscaler.enabled }}
@@ -37,6 +36,10 @@
 {{- $instance_groups = append $instance_groups "diego-cell" }}
 {{- end }}{{/* if control_plane */}}
 {{- end }}{{/* if eirini */}}
+
+{{- if not .Values.features.uaa.native }}
+{{- $instance_groups = append $instance_groups "uaa" }}
+{{- end }}
 
 {{- range $instance_group := $instance_groups }}
   {{- if index (snakecase $instance_group | index $.Values.sizing) "instances" | kindIs "invalid" | not }}

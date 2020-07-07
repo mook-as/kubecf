@@ -44,7 +44,7 @@ spec:
       paths:
       - path: "/"
         backend:
-          serviceName: uaa
+          serviceName: uaa-native
           servicePort: 8080
   {{- end }}
 

@@ -28,8 +28,8 @@ RETRIES=180 DELAY=10 retry check_qjob_ready ig
 
 green "Waiting for things to exist"
 resources=(
-    Service/uaa Service/api Service/router-public
-    StatefulSet/uaa StatefulSet/api StatefulSet/router
+    Service/api Service/router-public
+    StatefulSet/api StatefulSet/router
 )
 for resource in "${resources[@]}" ; do
     RETRIES=30 DELAY=5 retry get_resource "${resource}"

@@ -123,6 +123,11 @@
   path: /addons/name=bosh-dns-aliases/jobs/name=bosh-dns-aliases/properties/aliases/domain=uaa.service.cf.internal/targets/instance_group=uaa/instance_group
   value: uaa-native
 
+# Add the UAA name to the certificate
+- type: replace
+  path: /variables/name=uaa_ssl/options/alternative_names/-
+  value: "*.uaa-native"
+
 {{- else }}
 
 {{- range $bytes := .Files.Glob "assets/operations/pre_render_scripts/uaa_*" }}

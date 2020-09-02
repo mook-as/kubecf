@@ -74,7 +74,7 @@ spec:
         - /bin/bash
         - -c
         - |-
-          {{- .Files.Get "assets/scripts/helm/uaa/generate-nginx-config.sh" | indent 10 }}
+          {{- .Files.Get "assets/scripts/helm/uaa/generate-nginx-config.sh" | nindent 10 }}
         volumeMounts:
         - name: nginx-config
           mountPath: /run/nginx-config
@@ -94,7 +94,7 @@ spec:
         - /usr/bin/ruby
         - -e
         - |-
-          {{- .Files.Get "assets/scripts/helm/uaa/generate-uaa-config.rb" | indent 10 }}
+          {{- .Files.Get "assets/scripts/helm/uaa/generate-uaa-config.rb" | nindent 10 }}
         env:
         - name: DB_ADAPTER
           value: {{ $db_adapter | quote }}
@@ -116,7 +116,7 @@ spec:
         - /usr/bin/ruby
         - -e
         - |
-          {{- .Files.Get "assets/scripts/helm/uaa/generate-route-registrar-config.rb" | indent 10 }}
+          {{- .Files.Get "assets/scripts/helm/uaa/generate-route-registrar-config.rb" | nindent 10 }}
         env:
         - name: SYSTEM_DOMAIN
           value: {{ .Values.system_domain | quote }}
@@ -289,9 +289,9 @@ spec:
       - name: route-registrar
         # XXX FIXME: Get rid of the route registrar (because we should be using
         # proper ingress into the deployment)
-        image:
+        image: >-
           {{- with .Values.releases.routing }}
-            {{- printf "%s/routing:%s-%s-%s" .url .stemcell.os .stemcell.version .version }}
+            {{ printf "%s/routing:%s-%s-%s" .url .stemcell.os .stemcell.version .version }}
           {{- end }}
         command: [ /usr/bin/dumb-init, -- ]
         args:

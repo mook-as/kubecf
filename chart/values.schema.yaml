@@ -165,6 +165,15 @@ properties:
       # "blobstore" and "multiple_cluster_mode" don't have an "enabled" property
       blobstore: {}
       multiple_cluster_mode: {}
+      # "uaa" is for native UAA, and doesn't have "enabled"
+      uaa:
+        type: object
+        properties:
+          native: {type: boolean}
+          image: {type: string}
+          image_tag: {type: string}
+          init_image: {type: string}
+          init_image_tag: {type: string}
     additionalProperties:
       type: object
       properties:
@@ -260,7 +269,7 @@ properties:
     type: object
     additionalProperties:
       type: object
-      properties:
+      properties: &sizingProperties
         affinity: {type: object}
         ephemeral_disk:
           type: object
@@ -280,6 +289,20 @@ properties:
             size: {type: string}
           additionalProperties: false
       additionalProperties: false
+    properties:
+      uaa:
+        type: object
+        properties:
+          <<: *sizingProperties
+          resources:
+            type: object
+            properties:
+              requests:
+                type: object
+                properties:
+                  memory: {type: string}
+                  cpu: {type: string}
+        additionalProperties: false
 
   stacks:
     type: object

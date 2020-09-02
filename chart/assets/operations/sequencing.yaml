@@ -17,6 +17,13 @@
   value: {{ rest . | toJson | quote }}
 {{- end }}
 
+# When use native UAA, we change the service name due to the inability to change
+# things otherwise.  Thus we have to parameterize the name of the UAA service.
+{{- $uaa := "uaa" }}
+{{- if .Values.features.uaa.native }}
+  {{- $uaa = "uaa-native" }}
+{{- end }}
+
 # Dependency graph (the first to run is at the left):
 #
 # api        --> cc-worker
@@ -36,21 +43,21 @@
 {{- template "wait-for" list "cc-worker" "api" }}
 {{- template "wait-for" list "scheduler" "api" }}
 {{- template "wait-for" list "log-api"   "nats" }}
-{{- template "wait-for" list "log-cache" "uaa" }}
+{{- template "wait-for" list "log-cache" $uaa }}
 
 {{- if .Values.features.routing_api.enabled }}
   {{- template "wait-for" list "router"      "routing-api" }}
-  {{- template "wait-for" list "routing-api" "uaa" }}
-  {{- template "wait-for" list "tcp-router"  "uaa" }}
+  {{- template "wait-for" list "routing-api" $uaa }}
+  {{- template "wait-for" list "tcp-router"  $uaa }}
 {{- end }}
 
 {{- if .Values.features.credhub.enabled }}
-  {{- template "wait-for" list "credhub" "uaa" }}
+  {{- template "wait-for" list "credhub" $uaa }}
 {{- end }}
 
 {{- if not .Values.features.eirini.enabled }}
   {{- template "wait-for" list "auctioneer" "diego-api" }}
-  {{- template "wait-for" list "diego-cell" "uaa" }}
+  {{- template "wait-for" list "diego-cell" $uaa }}
 {{- end }}
 
 {{- if eq .Values.features.blobstore.provider "singleton" }}

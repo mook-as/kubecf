@@ -26,7 +26,7 @@ config = {
     user: 'nats',
     password: secret('var-nats-password/password'),
   }],
-  host: "#{addr.gsub('.', '-')}.uaa-native",
+  host: "#{addr.tr('.', '-')}.uaa-native",
   routes: [{
     health_check: {
       name: 'uaa-healthcheck',
@@ -35,7 +35,7 @@ config = {
     },
     name: 'uaa',
     registration_interval: '10s',
-    service_cert_domain_san: 'uaa.service.cf.internal',
+    server_cert_domain_san: 'uaa.service.cf.internal',
     tags: { component: 'uaa' },
     tls_port: 8443,
     uris: [

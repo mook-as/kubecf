@@ -132,92 +132,17 @@ spec:
         - sh
         - -c
         - |
-          cat > /etc/config/log4j2.properties <<"EOF"
-          status = error
-          dest = err
-          name = UaaLog
-
-          property.log_pattern=[%d{yyyy-MM-dd HH:mm:ss.SSS}] uaa%X{context} - %pid [%t] .... %5p --- %c{1}: %replace{%m}{(?<=password=|client_secret=)([^&]*)}{<redacted>}%n
-
-          appender.uaaDefaultAppender.type = Console
-          appender.uaaDefaultAppender.name = UaaDefaultAppender
-          appender.uaaDefaultAppender.layout.type = PatternLayout
-          appender.uaaDefaultAppender.layout.pattern = [UAA] ${log_pattern}
-
-          appender.uaaAuditAppender.type = Console
-          appender.uaaAuditAppender.name = UaaAuditAppender
-          appender.uaaAuditAppender.layout.type = PatternLayout
-          appender.uaaAuditAppender.layout.pattern = [UAA_AUDIT] ${log_pattern}
-
-          rootLogger.level = info
-          rootLogger.appenderRef.uaaDefaultAppender.ref = UaaDefaultAppender
-
-          logger.UAAAudit.name = UAA.Audit
-          logger.UAAAudit.level = info
-          logger.UAAAudit.additivity = true
-          logger.UAAAudit.appenderRef.auditEventLog.ref = UaaAuditAppender
-
-          logger.cfIdentity.name = org.cloudfoundry.identity
-          logger.cfIdentity.level = info
-          logger.cfIdentity.additivity = false
-          logger.cfIdentity.appenderRef.uaaDefaultAppender.ref = UaaDefaultAppender
-          EOF
+          {{- .Files.Get "assets/scripts/helm/uaa/generate-log-config.sh" | nindent 10 }}
         volumeMounts:
         - name: uaa-config
           mountPath: /etc/config
       - name: build-uaa-truststore
         image: {{ $uaa_image }}
         command:
-        - 'sh'
+        - 'bash'
         - '-c'
         - |
-          find_keytool_or_fail_fast() {
-            local has_keytool
-            ls "${JAVA_HOME}"/bin/keytool
-            has_keytool=$?
-            if [ ${has_keytool} -ne 0 ]; then
-              exit ${has_keytool}
-            fi
-          }
-          import_cert() {
-            local pemfile="${1}"
-            local alias="${2}"
-            echo "Adding ${pemfile} to truststore"
-            # Have to use cat instead of -file
-            # because keytool won't understand all of the filenames!
-            cat "${pemfile}" | "${JAVA_HOME}"/bin/keytool \
-              -noprompt \
-              -import \
-              -trustcacerts \
-              -alias "${alias}" \
-              -keystore "${TRUSTSTORE_FILE}" \
-              -storepass "${TRUSTSTORE_PASSWORD}"
-          }
-          get_alias() {
-            local pemfile="${1}"
-            basename "${pemfile}" .pem
-          }
-          add_ca_certs() {
-            local has_ca_certs
-            ls ${SECRETS_DIR}/ca_certs/*.pem
-            has_ca_certs=$?
-            if [ ${has_ca_certs} -eq 0 ]; then
-              for cert in ${SECRETS_DIR}/ca_certs/*.pem; do
-                import_cert "${cert}" "$(get_alias $cert)"
-              done
-            fi
-          }
-          add_system_certs() {
-            for cert in $OS_CERTS_DIR/*.pem; do
-              import_cert "${cert}" "$(get_alias $cert)"
-            done
-          }
-          main() {
-            find_keytool_or_fail_fast
-            add_ca_certs
-            add_system_certs
-          }
-          main
+          {{- .Files.Get "assets/scripts/helm/uaa/build-uaa-truststore.sh" | nindent 10 }}
         env:
         - name: TRUSTSTORE_FILE
           value: /etc/truststore/uaa.pkcs12.truststore

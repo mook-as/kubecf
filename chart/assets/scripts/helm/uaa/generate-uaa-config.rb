@@ -22,7 +22,7 @@ end
 # TODO: generate the OAuth clients with some sane mechanism, rather than
 # pulling it out of the BOSH configs (which should go away eventually).
 manifest = YAML.load secret('with-ops/manifest.yaml')
-ig = manifest['addons'].find { |g| g['name'] == 'uaa' }
+ig = manifest['addons'].find { |g| g['name'] == 'uaa-disabled' }
 job = ig['jobs'].find { |j| j['name'] == 'uaa' }
 
 # Replace the OAuth client secrets because we don't get template-render

@@ -106,12 +106,12 @@
 - type: replace
   path: /addons/-
   value:
-    name: uaa
+    name: uaa-disabled
 
 # Move the UAA OAuth clients out so we can get them later
 - type: qmove
   from: /instance_groups/name=uaa/jobs/name=uaa
-  path: /addons/name=uaa/jobs?/-
+  path: /addons/name=uaa-disabled/jobs?/-
 
 # Delete the UAA instance group
 - type: remove
@@ -122,11 +122,6 @@
 - type: replace
   path: /addons/name=bosh-dns-aliases/jobs/name=bosh-dns-aliases/properties/aliases/domain=uaa.service.cf.internal/targets/instance_group=uaa/instance_group
   value: uaa-native
-
-# Add the UAA name to the certificate
-- type: replace
-  path: /variables/name=uaa_ssl/options/alternative_names/-
-  value: "*.uaa-native"
 
 {{- else }}
 

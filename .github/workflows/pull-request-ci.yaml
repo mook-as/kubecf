@@ -284,6 +284,13 @@ jobs:
 
       # Run smoke tests
       - run: make smoke-tests
+        id: smoke-tests
+        timeout-minutes: 10
+        continue-on-error: true
+
+      - name: Re-rune smoke tests
+        run: make smoke-tests
+        if: always() && steps.smoke-tests.outcome == 'failure'
         timeout-minutes: 10
 
       # Run brain tests

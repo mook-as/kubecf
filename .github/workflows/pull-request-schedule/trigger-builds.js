@@ -57,9 +57,12 @@ module.exports = async ({ github, context }) => {
 
     console.log(`Found ${pulls.length} PRs.`);
 
+    const { Octokit } = require("@octokit/core");
+    const triggeringClient = new Octokit({ auth: process.env.GITHUB_TOKEN });
+
     for (let pr of pulls.slice(0, process.env.CAPACITY)) {
         console.log(`Queuing PR#${pr.number}`);
-        github.issues.addLabels({
+        triggeringClient.issues.addLabels({
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: pr.number,

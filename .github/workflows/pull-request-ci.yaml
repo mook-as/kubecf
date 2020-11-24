@@ -189,6 +189,8 @@ jobs:
           json_file="$(mktemp)"
           echo "${{ steps.vault.outputs.GKE_CRED_JSON }}" > "${json_file}"
           echo "GKE_CRED_JSON=${json_file}" >> "${GITHUB_ENV}"
+          ls -l "${json_file}"
+          jq -r .project_id "${json_file}"
         timeout-minutes: 1
 
       # Cache catapult's common tools

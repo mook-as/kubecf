@@ -264,6 +264,7 @@ jobs:
 
       # Helm install kubecf
       - name: Install KubeCF
+        id: kubecf-install
         run: |
           if [[ "${FEATURE_EIRINI}" != "true" ]]; then
             # `make kubecf-apply` gets confused if the values is `false`.
@@ -439,6 +440,18 @@ jobs:
           path: ${{ github.workspace }}/kubecf/klog.tar.gz
         timeout-minutes: 5
         continue-on-error: true
+
+      # Attempt to gracefully uninstall the chart.
+      # Do this after fetching logs, since uninstalling will (try to) remove the
+      # relevant namespaces, losing the logs in the progress.
+      - name: Uninstall KubeCF
+        if: always() && steps.kubecf-install.outcome != 'skipped'
+        run: |
+          set +o errexit
+          helm delete --namespace kubecf kubecf
+          kubectl delete --ignore-not-found namespace/kubecf
+        continue-on-error: true
+        timeout-minutes: 10
 
       # Teardown created k8s cluster
       - name: kubernetes:teardown

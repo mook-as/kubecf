@@ -80,10 +80,24 @@ jobs:
           name: kubecf-bundle.tgz
           path: ${{ github.workspace }}/bundle
 
+  build-info:
+    name: Get Build Information
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.get-owner-name.outputs.owner }}
+    steps:
+    - name: Get Owner Name
+      id: get-owner-name
+      run: |
+        OWNER="$(tr --delete --complement A-Za-z0-9 <<< "${OWNER}")"
+        printf "::set-output name=owner::%s\n" "${OWNER}"
+      env:
+        OWNER: ${{ github.repository_owner }}
+
   tests:
     name: Tests
     runs-on: ubuntu-20.04
-    needs: build
+    needs: [build, build-info]
     env:
       # For KubeCF
       PINNED_TOOLS: true
@@ -93,7 +107,7 @@ jobs:
       # Note that credentials-related parts are in the individual steps
       BACKEND: gke
       DOWNLOAD_CATAPULT_DEPS: "false"
-      CLUSTER_NAME: ci-${{ github.run_id }}-${{ matrix.backend }}
+      CLUSTER_NAME: kubecf-ci-${{ needs.build-info.outputs.owner}}-${{ github.run_id }}-${{ matrix.backend }}
     defaults:
       run:
         working-directory: kubecf
@@ -201,7 +215,7 @@ jobs:
       - run: make k8s
         working-directory: catapult
         env:
-          GKE_CLUSTER_NAME: kubecf-ci-${{ github.run_id }}-${{ matrix.backend }}
+          GKE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
           OWNER: ${{ github.repository_owner }}
           DEBUG_MODE: true
           GKE_NODE_COUNT: 1
@@ -250,6 +264,7 @@ jobs:
 
       # Helm install kubecf
       - name: Install KubeCF
+        id: kubecf-install
         run: |
           if [[ "${FEATURE_EIRINI}" != "true" ]]; then
             # `make kubecf-apply` gets confused if the values is `false`.
@@ -426,6 +441,18 @@ jobs:
         timeout-minutes: 5
         continue-on-error: true
 
+      # Attempt to gracefully uninstall the chart.
+      # Do this after fetching logs, since uninstalling will (try to) remove the
+      # relevant namespaces, losing the logs in the progress.
+      - name: Uninstall KubeCF
+        if: always() && steps.kubecf-install.outcome != 'skipped'
+        run: |
+          set +o errexit
+          helm delete --namespace kubecf kubecf
+          kubectl delete --ignore-not-found namespace/kubecf
+        continue-on-error: true
+        timeout-minutes: 10
+
       # Teardown created k8s cluster
       - name: kubernetes:teardown
         if: always()
@@ -437,5 +464,5 @@ jobs:
           make clean
         working-directory: catapult
         env:
-          GKE_CLUSTER_NAME: kubecf-ci-${{ github.run_id }}-${{ matrix.backend }}
+          GKE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
         timeout-minutes: 20

@@ -167,20 +167,24 @@ jobs:
 
       - name: Download Previous Release Bundle
         if: matrix.upgrade == 'upgrade'
-        uses: houqp/download-release-assets-action@ea3c043cb1fee6789d98071c3729d85fea3d8010
+        id: download-bundle-previous
+        uses: XAMPPRocky/get-github-release@c28f4f6f4c0e5ce19f89ee5819d5472cd782da46
         with:
           # Delibrately not getting releases from forks
-          repo: cloudfoundry-incubator/kubecf
-          match: "kubecf-bundle-.*.tgz"
-          rename: "${GITHUB_WORKSPACE}/kubecf-bundle-previous.tgz"
+          owner: cloudfoundry-incubator
+          repo: kubecf
+          matches: "kubecf-bundle-.*.tgz"
+          token: ${{ github.token }}
+          install_path: "${GITHUB_WORKSPACE}"
         timeout-minutes: 2
 
       - name: Extract Previous Release Bundle
         if: matrix.upgrade == 'upgrade'
         run: |
           mkdir "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
-          tar xf "${GITHUB_WORKSPACE}/kubecf-bundle-previous.tgz" \
-            -C "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
+          tar xf "${ARCHIVE}" -C "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
+        env:
+          ARCHIVE: ${{ steps.download-bundle-previous.outputs.install_path }}
 
       # Download chart bundle
       - id: download-bundle

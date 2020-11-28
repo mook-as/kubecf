@@ -38,7 +38,7 @@ if [ -n "${FEATURE_AUTOSCALER:-}" ]; then
     HELM_ARGS+=(--set "features.autoscaler.enabled=true")
 fi
 
-if [ -n "${FEATURE_EIRINI:-}" ]; then
+if [ -n "${FEATURE_EIRINI:-}" ] && [ "${FEATURE_EIRINI:-}" != "false" ]; then
     HELM_ARGS+=(
         --set "features.eirini.enabled=true"
         --set "install_stacks={sle15}"

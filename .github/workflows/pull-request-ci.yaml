@@ -190,10 +190,8 @@ jobs:
       - name: Extract Previous Release Bundle
         if: matrix.upgrade == 'upgrade'
         run: |
-          ls -la "${GITHUB_WORKSPACE}"
-          ls -l "${ARCHIVE}"
           mkdir "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
-          tar xf "${ARCHIVE}" -C "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
+          tar xvzf "${ARCHIVE}" -C "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
         env:
           ARCHIVE: ${{ steps.download-bundle-previous.outputs.install_path }}
 
@@ -254,7 +252,7 @@ jobs:
       - run: make k8s
         working-directory: catapult
         env:
-          GKE_CLUSTER_NAME: kubecf-ci-${{ github.run_id }}-${{ matrix.backend }}
+          GKE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
           OWNER: ${{ github.repository_owner }}
           DEBUG_MODE: true
           GKE_NODE_COUNT: 1
@@ -583,5 +581,5 @@ jobs:
         run: make clean
         working-directory: catapult
         env:
-          GKE_CLUSTER_NAME: kubecf-ci-${{ github.run_id }}-${{ matrix.backend }}
+          GKE_CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
         timeout-minutes: 20

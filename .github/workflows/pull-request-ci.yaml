@@ -111,12 +111,21 @@ jobs:
     # Matrix to test diego and eirini
     strategy:
       matrix:
-        upgrade: [ "no-upgrade", "upgrade" ]
         include:
           - backend: diego
+            upgrade: no-upgrade
             internetless: true
             ccdb-rotate: true
           - backend: eirini
+            upgrade: no-upgrade
+            internetless: false
+            ccdb-rotate: false
+          - backend: diego
+            upgrade: upgrade
+            internetless: true
+            ccdb-rotate: true
+          - backend: eirini
+            upgrade: upgrade
             internetless: false
             ccdb-rotate: false
       fail-fast: false
@@ -175,12 +184,14 @@ jobs:
           repo: kubecf
           matches: "kubecf-bundle-.*.tgz"
           token: ${{ github.token }}
-          install_path: "${GITHUB_WORKSPACE}"
+          install_path: "${{ github.workspace }}/previous-"
         timeout-minutes: 2
 
       - name: Extract Previous Release Bundle
         if: matrix.upgrade == 'upgrade'
         run: |
+          ls -la "${GITHUB_WORKSPACE}"
+          ls -l "${ARCHIVE}"
           mkdir "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
           tar xf "${ARCHIVE}" -C "${GITHUB_WORKSPACE}/kubecf-bundle-previous"
         env:
